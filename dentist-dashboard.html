@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dentist Dashboard - Appointments</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 2rem;
+        }
+
+        .appointments-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .appointments-table th,
+        .appointments-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .appointments-table th {
+            background-color: #17679d;
+            color: white;
+            font-weight: bold;
+        }
+
+        .appointments-table tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .filter-section {
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-section select,
+        .filter-section input {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .filter-section button {
+            padding: 0.5rem 1rem;
+            background-color: #17679d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .filter-section button:hover {
+            background-color: #2980b9;
+        }
+
+        .no-appointments {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>Dentist Dashboard</h1>
+        <h2>Appointment List</h2>
+
+        <div class="filter-section">
+            <select id="departmentFilter">
+                <option value="">All Departments</option>
+                <option value="1">Oral Medicine & Radiology</option>
+                <option value="2">Conservative Dentistry & Endodontics</option>
+                <option value="3">Periodondology</option>
+                <option value="4">Oral & Maxillofacial Surgery</option>
+                <option value="5">Prosthodontics and Crown & Bridge</option>
+                <option value="6">Pediatric and Preventive Dentistry</option>
+                <option value="7">Orthodontics & Dentofacial Orthopedics</option>
+                <option value="8">Public Health Dentistry</option>
+            </select>
+
+            <select id="dateFilter">
+                <option value="">All Dates</option>
+                <option value="today">Today</option>
+                <option value="tomorrow">Tomorrow</option>
+                <option value="week">This Week</option>
+            </select>
+
+            <input type="date" id="customDateFilter" style="display: none;">
+
+            <button onclick="applyFilters()">Apply Filters</button>
+            <button onclick="resetFilters()">Reset</button>
+        </div>
+
+        <table class="appointments-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Patient Name</th>
+                    <th>Doctor</th>
+                    <th>Department</th>
+                    <th>Contact</th>
+                    <th>Transaction</th>
+                    <th>Problem</th>
+                </tr>
+            </thead>
+            <tbody id="appointmentsTableBody">
+                <!-- Appointments will be loaded here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Load appointments when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAppointments();
+        });
+
+        // Handle date filter change
+        document.getElementById('dateFilter').addEventListener('change', function(e) {
+            const customDateFilter = document.getElementById('customDateFilter');
+            if (e.target.value === 'custom') {
+                customDateFilter.style.display = 'block';
+            } else {
+                customDateFilter.style.display = 'none';
+            }
+        });
+
+        function loadAppointments(filters = {}) {
+            fetch('/api/appointments?' + new URLSearchParams(filters))
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.getElementById('appointmentsTableBody');
+                    tableBody.innerHTML = '';
+
+                    if (data.length === 0) {
+                        tableBody.innerHTML = `
+                            <tr>
+                                <td colspan="8" class="no-appointments">
+                                    No appointments found
+                                </td>
+                            </tr>
+                        `;
+                        return;
+                    }
+
+                    data.forEach(appointment => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${formatDate(appointment.appointment_date)}</td>
+                            <td>${formatTime(appointment.time_slot)}</td>
+                            <td>${appointment.patient_name}</td>
+                            <td>${appointment.doctor_name}</td>
+                            <td>${appointment.department_name}</td>
+                            <td>${appointment.phone}<br>${appointment.email}</td>
+                            <td>${formatTransactionType(appointment.transaction_type)}</td>
+                            <td>${appointment.problem}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading appointments:', error);
+                    alert('Error loading appointments. Please try again.');
+                });
+        }
+
+        function applyFilters() {
+            const department = document.getElementById('departmentFilter').value;
+            const dateFilter = document.getElementById('dateFilter').value;
+            const customDate = document.getElementById('customDateFilter').value;
+
+            const filters = {};
+            if (department) filters.department = department;
+            if (dateFilter === 'custom' && customDate) {
+                filters.date = customDate;
+            } else if (dateFilter) {
+                filters.dateFilter = dateFilter;
+            }
+
+            loadAppointments(filters);
+        }
+
+        function resetFilters() {
+            document.getElementById('departmentFilter').value = '';
+            document.getElementById('dateFilter').value = '';
+            document.getElementById('customDateFilter').value = '';
+            document.getElementById('customDateFilter').style.display = 'none';
+            loadAppointments();
+        }
+
+        function formatDate(dateString) {
+            const options = { year: 'numeric', month: 'long', day: 'numeric' };
+            return new Date(dateString).toLocaleDateString(undefined, options);
+        }
+
+        function formatTime(timeString) {
+            const [hours, minutes] = timeString.split(':');
+            const hour = parseInt(hours);
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            const hour12 = hour % 12 || 12;
+            return `${hour12}:${minutes} ${ampm}`;
+        }
+
+        function formatTransactionType(type) {
+            const types = {
+                'cash': 'Cash Payment',
+                'card': 'Card Payment',
+                'upi': 'UPI Payment',
+                'insurance': 'Insurance Claim'
+            };
+            return types[type] || type;
+        }
+    </script>
+</body>
+</html> 
