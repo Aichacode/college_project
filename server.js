@@ -28,6 +28,7 @@ app.get('/api/appointments', (req, res) => {
     
     let query = `
         SELECT 
+            a.patient_id  ,      
             a.appointment_date,
             a.time_slot,
             p.name as patient_name,
