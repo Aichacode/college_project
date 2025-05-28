@@ -134,7 +134,6 @@ CREATE TABLE  appointments (
     time_slot VARCHAR(20) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     problem VARCHAR (100) not null,
-    transaction_type VARCHAR(50),
     FOREIGN KEY (patient_id) REFERENCES patients(id),
     FOREIGN KEY (department_id) REFERENCES departments(id),
     FOREIGN KEY (doctor_id) REFERENCES doctors(id)
