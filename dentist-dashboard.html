@@ -105,13 +105,14 @@
         <table class="appointments-table">
             <thead>
                 <tr>
+                    <th>id</th>
+
                     <th>Date</th>
                     <th>Time</th>
                     <th>Patient Name</th>
                     <th>Doctor</th>
                     <th>Department</th>
                     <th>Contact</th>
-                    <th>Transaction</th>
                     <th>Problem</th>
                 </tr>
             </thead>
@@ -154,17 +155,18 @@
                         `;
                         return;
                     }
-
+                    
                     data.forEach(appointment => {
                         const row = document.createElement('tr');
+                        console.log("appointment",appointment);
                         row.innerHTML = `
+                            <td>${appointment.patient_id}</td>
                             <td>${formatDate(appointment.appointment_date)}</td>
                             <td>${formatTime(appointment.time_slot)}</td>
                             <td>${appointment.patient_name}</td>
                             <td>${appointment.doctor_name}</td>
                             <td>${appointment.department_name}</td>
                             <td>${appointment.phone}<br>${appointment.email}</td>
-                            <td>${formatTransactionType(appointment.transaction_type)}</td>
                             <td>${appointment.problem}</td>
                         `;
                         tableBody.appendChild(row);
