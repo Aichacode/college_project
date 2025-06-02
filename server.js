@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 const db = require('./db');
+const { sendAppointmentConfirmation } = require('./emailConfig');
 
 const app = express();
 const port = 3000;
@@ -110,7 +111,7 @@ app.get('/api/dentists', (req, res) => {
 });
 
 // Handle appointment submission
-app.post('/submit-appointment', (req, res) => {
+app.post('/submit-appointment', async (req, res) => {
     const {
         name,
         address,
@@ -143,7 +144,7 @@ app.post('/submit-appointment', (req, res) => {
         VALUES (?, ?, ?, ?)
     `;
 
-    db.query(patientQuery, [name, address, email, phone], (err, patientResult) => {
+    db.query(patientQuery, [name, address, email, phone], async (err, patientResult) => {
         if (err) {
             console.error('Error saving patient:', err);
             res.json({ success: false, error: 'Failed to save patient information' });
@@ -152,15 +153,17 @@ app.post('/submit-appointment', (req, res) => {
 
         const patientId = patientResult.insertId;
 
-        // Get the doctor's ID directly using the dentist value
+        // Get the doctor's ID and name
         const getDoctorQuery = `
-            SELECT id FROM doctors 
-            WHERE id = ?
+            SELECT d.id, d.name, dep.name as department_name
+            FROM doctors d
+            JOIN departments dep ON d.department_id = dep.id
+            WHERE d.id = ?
         `;
 
-        console.log('Looking for doctor with ID:', dentist); // Log the doctor ID we're searching for
+        console.log('Looking for doctor with ID:', dentist);
 
-        db.query(getDoctorQuery, [dentist], (err, doctorResult) => {
+        db.query(getDoctorQuery, [dentist], async (err, doctorResult) => {
             if (err) {
                 console.error('Error finding doctor:', err);
                 res.json({ success: false, error: 'Failed to find doctor' });
@@ -174,6 +177,8 @@ app.post('/submit-appointment', (req, res) => {
             }
 
             const doctorId = doctorResult[0].id;
+            const doctorName = doctorResult[0].name;
+            const departmentName = doctorResult[0].department_name;
             console.log('Found doctor ID:', doctorId);
 
             // Then, insert the appointment
@@ -186,13 +191,40 @@ app.post('/submit-appointment', (req, res) => {
             db.query(
                 appointmentQuery,
                 [patientId, department, doctorId, date, time, problem],
-                (err, appointmentResult) => {
+                async (err, appointmentResult) => {
                     if (err) {
                         console.error('Error saving appointment:', err);
                         res.json({ success: false, error: 'Failed to save appointment' });
                         return;
                     }
-                    res.json({ success: true, appointmentId: appointmentResult.insertId });
+
+                    // Prepare appointment details for email
+                    const appointmentDetails = {
+                        patientName: name,
+                        patientEmail: email,
+                        appointmentDate: date,
+                        appointmentTime: time,
+                        doctorName: doctorName,
+                        departmentName: departmentName,
+                        problem: problem
+                    };
+
+                    // Send confirmation email
+                    try {
+                        const emailSent = await sendAppointmentConfirmation(appointmentDetails);
+                        if (!emailSent) {
+                            console.warn('Failed to send confirmation email, but appointment was saved');
+                        }
+                    } catch (emailError) {
+                        console.error('Error sending confirmation email:', emailError);
+                        // Don't fail the appointment booking if email fails
+                    }
+
+                    res.json({ 
+                        success: true, 
+                        appointmentId: appointmentResult.insertId,
+                        emailSent: true
+                    });
                 }
             );
         });
