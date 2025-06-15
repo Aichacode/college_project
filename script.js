@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 dentistSelect.innerHTML = '<option value="">loading dentists...</option>';
 
                 // fetch dentists for selected department using the full url
-                fetch(`${API_BASE-URL}/api/dentists?department=${departmentId}`)
+                fetch(${API_BASE_URL}/api/dentists?department=${departmentId})
                     .then(dentists => {
                         dentistSelect.innerHTML = '<option value="">choose a dentist</option>';
                         dentists.forEach(dentist => {
