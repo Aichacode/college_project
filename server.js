@@ -3,33 +3,126 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 const db = require('./db');
-const { sendAppointmentConfirmation } = require('./emailConfig');
+const { sendAppointmentConfirmation } = require('./emailconfig');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = 3000;
+
+// Secret key for JWT - in production, use environment variable
+const JWT_SECRET = 'your-secret-key-here';
 
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname)));
 
+// Authentication middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
+        req.user = user;
+        next();
+    });
+};
+
 // Serve the main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Serve the dentist dashboard
+// Serve the dentist dashboard (HTML file itself does not require token for initial load)
 app.get('/dentist-dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'dentist-dashboard.html'));
 });
 
+// Serve the login page
+app.get('/dentist-login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dentist-login.html'));
+});
+
+// Login endpoint
+app.post('/api/dentist-login', async (req, res) => {
+    const { username, password } = req.body;
+
+    console.log('Login attempt for username:', username, 'with password:', password);
+
+    if (!username || !password) {
+        console.log('Missing username or password');
+        return res.status(400).json({ success: false, error: 'Username and password are required' });
+    }
+
+    // Query the database for the dentist with case-insensitive username
+    const query = `
+        SELECT dl.*, d.name as doctor_name, d.doctor_id
+        FROM dentist_login dl
+        JOIN doctors d ON dl.doctor_id = d.doctor_id
+        WHERE LOWER(dl.username) = LOWER(?)
+    `;
+
+    db.query(query, [username], async (err, results) => {
+        if (err) {
+            console.error('Database error during login query:', err);
+            return res.status(500).json({ success: false, error: 'Database error' });
+        }
+
+        if (results.length === 0) {
+            console.log('Login attempt failed: username not found in DB for:', username);
+            return res.status(401).json({ success: false, error: 'Invalid username or password' });
+        }
+
+        const dentist = results[0];
+        console.log('Found dentist in DB:', dentist.username, 'DB password:', dentist.password);
+
+        // For now, we're using plain text comparison since passwords are stored as plain text
+        // In production, you should use bcrypt.compare() with hashed passwords
+        if (password === dentist.password) {
+            console.log('Password matched for:', dentist.username);
+            // Create JWT token
+            const token = jwt.sign(
+                { 
+                    id: dentist.doctor_id,
+                    username: dentist.username,
+                    name: dentist.doctor_name
+                },
+                JWT_SECRET,
+                { expiresIn: '24h' }
+            );
+
+            res.json({
+                success: true,
+                token,
+                user: {
+                    id: dentist.doctor_id,
+                    username: dentist.username,
+                    name: dentist.doctor_name
+                }
+            });
+        } else {
+            console.log('Login attempt failed: incorrect password for:', username);
+            res.status(401).json({ success: false, error: 'Invalid username or password' });
+        }
+    });
+});
+
 // API endpoint to get appointments with filters
-app.get('/api/appointments', (req, res) => {
+app.get('/api/appointments', authenticateToken, (req, res) => {
     const { department, date, dateFilter } = req.query;
     
     let query = `
         SELECT 
-            a.patient_id  ,      
+            a.id,
+            a.patient_id,      
             a.appointment_date,
             a.time_slot,
             p.name as patient_name,
@@ -41,7 +134,7 @@ app.get('/api/appointments', (req, res) => {
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
         JOIN departments d ON a.department_id = d.id
-        JOIN doctors doc ON a.doctor_id = doc.id
+        JOIN doctors doc ON a.doctor_id = doc.doctor_id
         WHERE 1=1
     `;
     
@@ -94,7 +187,7 @@ app.get('/api/dentists', (req, res) => {
     }
 
     const query = `
-        SELECT id, name 
+        SELECT doctor_id, name 
         FROM doctors 
         WHERE department_id = ?
         ORDER BY name ASC
@@ -129,8 +222,15 @@ app.post('/submit-appointment', async (req, res) => {
     console.log('Dentist value received:', dentist);
     console.log('Department value received:', department);
 
+    // Validate dentist ID
+    if (!dentist) {
+        console.error('Dentist ID is missing or invalid:', dentist);
+        res.json({ success: false, error: 'Dentist selection is required.' });
+        return;
+    }
+
     // First, let's check what doctors we have in the database
-    db.query('SELECT * FROM doctors', (err, allDoctors) => {
+    db.query('SELECT * FROM doctors WHERE d.doctor_id = ?', [dentist], (err, allDoctors) => {
         if (err) {
             console.error('Error fetching doctors:', err);
         } else {
@@ -155,10 +255,10 @@ app.post('/submit-appointment', async (req, res) => {
 
         // Get the doctor's ID and name
         const getDoctorQuery = `
-            SELECT d.id, d.name, dep.name as department_name
+            SELECT d.doctor_id, d.name, dep.name as department_name
             FROM doctors d
             JOIN departments dep ON d.department_id = dep.id
-            WHERE d.id = ?
+            WHERE d.doctor_id = ?
         `;
 
         console.log('Looking for doctor with ID:', dentist);
@@ -176,7 +276,7 @@ app.post('/submit-appointment', async (req, res) => {
                 return;
             }
 
-            const doctorId = doctorResult[0].id;
+            const doctorId = doctorResult[0].doctor_id;
             const doctorName = doctorResult[0].name;
             const departmentName = doctorResult[0].department_name;
             console.log('Found doctor ID:', doctorId);
