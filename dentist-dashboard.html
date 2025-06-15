@@ -69,11 +69,44 @@
             padding: 2rem;
             color: #666;
         }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logout-button {
+            padding: 0.5rem 1rem;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .logout-button:hover {
+            background-color: #c82333;
+        }
     </style>
 </head>
 <body>
     <div class="dashboard-container">
-        <h1>Dentist Dashboard</h1>
+        <div class="dashboard-header">
+            <h1>Dentist Dashboard</h1>
+            <div class="user-info">
+                <span id="userName"></span>
+                <button onclick="logout()" class="logout-button">Logout</button>
+            </div>
+        </div>
         <h2>Appointment List</h2>
 
         <div class="filter-section">
@@ -123,8 +156,23 @@
     </div>
 
     <script>
-        // Load appointments when page loads
+        // Add this at the beginning of your script
+        // Check authentication on page load
         document.addEventListener('DOMContentLoaded', function() {
+            const token = localStorage.getItem('dentistToken');
+            if (!token) {
+                window.location.href = '/dentist-login';
+                return;
+            }
+
+            // Set user name from token
+            try {
+                const tokenData = JSON.parse(atob(token.split('.')[1]));
+                document.getElementById('userName').textContent = `Welcome, ${tokenData.name}`;
+            } catch (error) {
+                console.error('Error parsing token:', error);
+            }
+
             loadAppointments();
         });
 
@@ -139,43 +187,63 @@
         });
 
         function loadAppointments(filters = {}) {
-            fetch('/api/appointments?' + new URLSearchParams(filters))
-                .then(response => response.json())
-                .then(data => {
-                    const tableBody = document.getElementById('appointmentsTableBody');
-                    tableBody.innerHTML = '';
+            const token = localStorage.getItem('dentistToken');
+            if (!token) {
+                window.location.href = '/dentist-login';
+                return;
+            }
 
-                    if (data.length === 0) {
-                        tableBody.innerHTML = `
-                            <tr>
-                                <td colspan="8" class="no-appointments">
-                                    No appointments found
-                                </td>
-                            </tr>
-                        `;
-                        return;
-                    }
-                    
-                    data.forEach(appointment => {
-                        const row = document.createElement('tr');
-                        console.log("appointment",appointment);
-                        row.innerHTML = `
-                            <td>${appointment.patient_id}</td>
-                            <td>${formatDate(appointment.appointment_date)}</td>
-                            <td>${formatTime(appointment.time_slot)}</td>
-                            <td>${appointment.patient_name}</td>
-                            <td>${appointment.doctor_name}</td>
-                            <td>${appointment.department_name}</td>
-                            <td>${appointment.phone}<br>${appointment.email}</td>
-                            <td>${appointment.problem}</td>
-                        `;
-                        tableBody.appendChild(row);
-                    });
-                })
-                .catch(error => {
-                    console.error('Error loading appointments:', error);
-                    alert('Error loading appointments. Please try again.');
+            fetch('/api/appointments?' + new URLSearchParams(filters), {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => {
+                if (response.status === 401 || response.status === 403) {
+                    // Token expired or invalid
+                    localStorage.removeItem('dentistToken');
+                    window.location.href = '/dentist-login';
+                    return;
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data) return; // Handle redirect case
+                
+                const tableBody = document.getElementById('appointmentsTableBody');
+                tableBody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="8" class="no-appointments">
+                                No appointments found
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                data.forEach(appointment => {
+                    const row = document.createElement('tr');
+                    console.log("appointment",appointment);
+                    row.innerHTML = `
+                        <td>${appointment.patient_id}</td>
+                        <td>${formatDate(appointment.appointment_date)}</td>
+                        <td>${formatTime(appointment.time_slot)}</td>
+                        <td>${appointment.patient_name}</td>
+                        <td>${appointment.doctor_name}</td>
+                        <td>${appointment.department_name}</td>
+                        <td>${appointment.phone}<br>${appointment.email}</td>
+                        <td>${appointment.problem}</td>
+                    `;
+                    tableBody.appendChild(row);
                 });
+            })
+            .catch(error => {
+                console.error('Error loading appointments:', error);
+                alert('Error loading appointments. Please try again.');
+            });
         }
 
         function applyFilters() {
@@ -223,6 +291,12 @@
                 'insurance': 'Insurance Claim'
             };
             return types[type] || type;
+        }
+
+        // Add logout function
+        function logout() {
+            localStorage.removeItem('dentistToken');
+            window.location.href = '/dentist-login';
         }
     </script>
 </body>
