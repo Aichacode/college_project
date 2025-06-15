@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(dentists => {
                         dentists.forEach(dentist => {
                             const option = document.createElement('option');
-                            option.value = dentist.id;
+                            option.value = dentist.doctor_id;
                             option.textContent = dentist.name;
                             dentistSelect.appendChild(option);
                         });
