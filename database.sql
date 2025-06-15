@@ -138,3 +138,20 @@ CREATE TABLE  appointments (
     FOREIGN KEY (department_id) REFERENCES departments(id),
     FOREIGN KEY (doctor_id) REFERENCES doctors(id)
 );
+
+-- Create dentist login table
+CREATE TABLE IF NOT EXISTS dentist_login (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    doctor_id INT NOT NULL,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id)
+);
+
+-- Clear existing data
+DELETE FROM dentist_login;
+SET SQL_SAFE_UPDATES = 0;
+
+-- Insert login credentials (password is 'password123' for all)
+INSERT INTO dentist_login (doctor_id, username, password) VALUES
+(1, 'dr.aiden', 'password123');
