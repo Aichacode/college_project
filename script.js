@@ -31,6 +31,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const today = new Date().toISOString().split('T')[0];
         dateInput.min = today;
 
+        // add base URL configuration
+        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ?''// Empty string for local development
+        : 'https//college-project-gilt-nu.vercel.app'; // vercel deployement domain     
+
         // Add event listener for department change
         const departmentSelect = document.getElementById('department');
         const dentistSelect = document.getElementById('dentist');
@@ -43,10 +48,14 @@ document.addEventListener('DOMContentLoaded', function() {
             dentistSelect.innerHTML = '<option value="">Choose a dentist</option>';
             
             if (departmentId) {
-                // Fetch dentists for selected department
-                fetch(`/api/dentists?department=${departmentId}`)
-                    .then(response => response.json())
+              // show loading state
+                dentistSelect.disabled = true;
+                dentistSelect.innerHTML = '<option value="">loading dentists...</option>';
+
+                // fetch dentists for selected department using the full url
+                fetch(`${API_BASE-URL}/api/dentists?department=${departmentId}`)
                     .then(dentists => {
+                        dentistSelect.innerHTML = '<option value="">choose a dentist</option>';
                         dentists.forEach(dentist => {
                             const option = document.createElement('option');
                             option.value = dentist.doctor_id;
@@ -56,13 +65,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     })
                     .catch(error => {
                         console.error('Error fetching dentists:', error);
-                        alert('Error loading dentists. Please try again.');
+                        dentistSelect.innerHTML = '<option value="">Error loading dentists</option>';
+                        alert('Error loading dentists: ${error.message}. Please try again.');
+                    })
+                    .finally(() => {
+                        dentistSelect.disabled = false;
                     });
             }
         });
 
         appointmentForm.addEventListener('submit', function(e) {
-            e.preventDefault();
+             e.preventDefault();
 
             // Get the stored patient data
             const patientData = JSON.parse(localStorage.getItem('patientData'));
@@ -81,15 +94,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 time: document.getElementById('time').value
             };
 
+            //disable form while submitting
+            const submitButton = this.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.textContent = 'Booking Appointment';
+            
             // Send data to server
-            fetch('/submit-appointment', {
+            //fetch('/submit-appointment', {
+            fetch(`${API_BASE_URL}/submit-appointment`,{
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(appointmentData)
             })
-            .then(response => response.json())
+            //.then(response => response.json())
+            .then(response => {
+                if (!response.ok){
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                    return response.jason();
+            })
             .then(data => {
                 if (data.success) {
                     alert('Appointment booked successfully!');
@@ -103,7 +128,13 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error booking appointment. Please try again.');
+                //alert('Error booking appointment. Please try again.');
+                throw new Error(data.error || 'Failed to book appointment');
+            })
+            .finally(() => {
+                // Re-enable form
+                submitButton.disabled = false;
+                submitButton.textContent ='Book Appointment';
             });
         });
     }
